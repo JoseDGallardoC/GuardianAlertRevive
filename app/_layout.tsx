@@ -5,9 +5,11 @@ import React from 'react';
 export default function RootLayout() {
   return (
     <Stack>
-      {/* Oculta el encabezado por defecto para nuestras pantallas */}
+      {/* Oculta el encabezado para nuestra pantalla principal (el splash) */}
       <Stack.Screen name="index" options={{ headerShown: false }} />
-      <Stack.Screen name="dashboard" options={{ title: 'Panel Principal' }}/>
+      {/* Las pantallas existentes y las nuevas */}
+      <Stack.Screen name="dashboard" options={{ title: 'Panel Principal' }} />
+      <Stack.Screen name="support" options={{ title: 'Soporte y Ayuda' }} />
     </Stack>
   );
 }
