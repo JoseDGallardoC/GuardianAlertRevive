@@ -1,21 +1,12 @@
 // app/(settings)/profile.tsx
-import React, { useState } from 'react';
-// Importamos los tipos que necesitamos de react-native
-import { ScrollView, StyleSheet, Text, TextInput, TextInputProps, TouchableOpacity, View } from 'react-native';
+import { useNavigation, useRouter } from 'expo-router';
+import React, { useCallback, useEffect, useState } from 'react';
+import { Alert, Image, ScrollView, StyleSheet, Text, TextInput, TextInputProps, TouchableOpacity, View } from 'react-native';
+// --- 1. IMPORTAMOS LAS FUNCIONES DE LA BASE DE DATOS ---
+import { Profile, getProfile, saveProfile } from '../../lib/database';
 
-// --- 1. DEFINIMOS LOS TIPOS PARA LAS PROPS DE FormInput ---
-type FormInputProps = {
-  label: string;
-  value: string;
-  onChangeText: (text: string) => void;
-} & TextInputProps; // <-- Esto permite pasar cualquier otra prop de un TextInput (como keyboardType)
-
-// --- 2. DEFINIMOS LOS TIPOS PARA LAS PROPS DE SectionTitle ---
-type SectionTitleProps = {
-  title: string;
-};
-
-// --- Componente reutilizable para nuestros campos de formulario (Ahora con tipos) ---
+// --- Componente reutilizable para nuestros campos de formulario ---
+type FormInputProps = { label: string; value: string; onChangeText: (text: string) => void } & TextInputProps;
 const FormInput: React.FC<FormInputProps> = ({ label, value, onChangeText, ...props }) => (
   <View style={styles.inputContainer}>
     <TextInput
@@ -29,7 +20,8 @@ const FormInput: React.FC<FormInputProps> = ({ label, value, onChangeText, ...pr
   </View>
 );
 
-// --- Componente para los Títulos de Sección (Ahora con tipos) ---
+// --- Componente para los Títulos de Sección ---
+type SectionTitleProps = { title: string };
 const SectionTitle: React.FC<SectionTitleProps> = ({ title }) => (
     <View style={styles.sectionTitleContainer}>
         <Text style={styles.sectionTitle}>{title}</Text>
@@ -37,70 +29,82 @@ const SectionTitle: React.FC<SectionTitleProps> = ({ title }) => (
 );
 
 export default function ProfileScreen() {
-  // El resto del código de la pantalla no cambia...
-  const [firstName, setFirstName] = useState('');
-  const [middleName, setMiddleName] = useState('');
-  const [firstLastName, setFirstLastName] = useState('');
-  const [secondLastName, setSecondLastName] = useState('');
-  const [phone, setPhone] = useState('');
-  const [email, setEmail] = useState('');
-  const [carSeatName, setCarSeatName] = useState('');
-
-  const [vehicle1Color, setVehicle1Color] = useState('');
-  const [vehicle1Brand, setVehicle1Brand] = useState('');
-  const [vehicle1Plate, setVehicle1Plate] = useState('');
-  const [tweetVehicle1, setTweetVehicle1] = useState(true);
-
-  const [vehicle2Color, setVehicle2Color] = useState('');
-  const [vehicle2Brand, setVehicle2Brand] = useState('');
-  const [vehicle2Plate, setVehicle2Plate] = useState('');
-  const [tweetVehicle2, setTweetVehicle2] = useState(true);
+  const router = useRouter();
+  const navigation = useNavigation(); // Hook para poder modificar el header
   
-  const handleSave = () => {
-    alert('Guardando perfil...');
-  }
+  // Usamos un solo estado para todo el perfil
+  const [profile, setProfile] = useState<Omit<Profile, 'id'>>({
+    firstName: '', middleName: null, firstLastName: '', secondLastName: null,
+    phone: '', email: '', carSeatName: null, vehicle1Color: null,
+    vehicle1Brand: null, vehicle1Plate: null
+  });
+  
+  // --- 2. LÓGICA PARA CARGAR DATOS AL ABRIR LA PANTALLA ---
+  useEffect(() => {
+    const loadProfile = async () => {
+      try {
+        const storedProfile = await getProfile();
+        if (storedProfile) {
+          setProfile(storedProfile);
+        }
+      } catch (e) {
+        Alert.alert("Error", "No se pudo cargar el perfil.");
+      }
+    };
+    loadProfile();
+  }, []);
+
+  // Función para manejar cambios en los inputs
+  const handleInputChange = (field: keyof typeof profile, value: string) => {
+    setProfile(prev => ({ ...prev, [field]: value }));
+  };
+
+  // --- 3. LÓGICA PARA GUARDAR LOS DATOS ---
+  const handleSave = useCallback(async () => {
+    if (!profile.firstName || !profile.firstLastName || !profile.phone) {
+      Alert.alert("Campos Requeridos", "Por favor, completa al menos Nombre, Apellido y Teléfono.");
+      return;
+    }
+    try {
+      await saveProfile(profile);
+      Alert.alert("Éxito", "Perfil guardado correctamente.", [
+        { text: 'OK', onPress: () => router.back() }
+      ]);
+    } catch (e) {
+      Alert.alert("Error", "No se pudo guardar el perfil.");
+    }
+  }, [profile, router]);
+
+  // --- 4. LÓGICA PARA HACER FUNCIONAR EL BOTÓN DEL HEADER ---
+  useEffect(() => {
+    navigation.setOptions({
+      headerRight: () => (
+        <TouchableOpacity onPress={handleSave}>
+          <Image 
+            source={require('../../assets/images/ic_save_white.png')} 
+            style={{ width: 24, height: 24, marginRight: 15, tintColor: '#C12F6E' }}
+          />
+        </TouchableOpacity>
+      ),
+    });
+  }, [navigation, handleSave]);
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
       <Text style={styles.formTitle}>Datos Personales</Text>
-      <FormInput label="Primer Nombre" value={firstName} onChangeText={setFirstName} />
-      <FormInput label="Segundo Nombre" value={middleName} onChangeText={setMiddleName} />
-      <FormInput label="Primer Apellido" value={firstLastName} onChangeText={setFirstLastName} />
-      <FormInput label="Segundo Apellido" value={secondLastName} onChangeText={setSecondLastName} />
-      <FormInput label="Teléfono Principal" value={phone} onChangeText={setPhone} keyboardType="phone-pad" />
-      <FormInput label="Email Principal" value={email} onChangeText={setEmail} keyboardType="email-address" />
-      <FormInput label="Nombre Asiento de Auto" value={carSeatName} onChangeText={setCarSeatName} />
+      <FormInput label="Primer Nombre" value={profile.firstName} onChangeText={(val) => handleInputChange('firstName', val)} />
+      <FormInput label="Segundo Nombre" value={profile.middleName || ''} onChangeText={(val) => handleInputChange('middleName', val)} />
+      <FormInput label="Primer Apellido" value={profile.firstLastName} onChangeText={(val) => handleInputChange('firstLastName', val)} />
+      <FormInput label="Segundo Apellido" value={profile.secondLastName || ''} onChangeText={(val) => handleInputChange('secondLastName', val)} />
+      <FormInput label="Teléfono Principal" value={profile.phone} onChangeText={(val) => handleInputChange('phone', val)} keyboardType="phone-pad" />
+      <FormInput label="Email Principal" value={profile.email} onChangeText={(val) => handleInputChange('email', val)} keyboardType="email-address" />
+      <FormInput label="Nombre Asiento de Auto" value={profile.carSeatName || ''} onChangeText={(val) => handleInputChange('carSeatName',val)} />
 
       <SectionTitle title="Información del Vehículo 1" />
-      <FormInput label="Color" value={vehicle1Color} onChangeText={setVehicle1Color} />
-      <FormInput label="Marca" value={vehicle1Brand} onChangeText={setVehicle1Brand} />
-      <FormInput label="Patente" value={vehicle1Plate} onChangeText={setVehicle1Plate} />
+      <FormInput label="Color" value={profile.vehicle1Color || ''} onChangeText={(val) => handleInputChange('vehicle1Color', val)} />
+      <FormInput label="Marca" value={profile.vehicle1Brand || ''} onChangeText={(val) => handleInputChange('vehicle1Brand', val)} />
+      <FormInput label="Patente" value={profile.vehicle1Plate || ''} onChangeText={(val) => handleInputChange('vehicle1Plate', val)} />
       
-      <Text style={styles.radioLabel}>¿Habilitar Tweet de Alerta?</Text>
-      <View style={styles.radioGroup}>
-        <TouchableOpacity style={[styles.radioButton, tweetVehicle1 && styles.radioButtonActive]} onPress={() => setTweetVehicle1(true)}>
-          <Text style={[styles.radioText, tweetVehicle1 && styles.radioTextActive]}>Sí</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={[styles.radioButton, !tweetVehicle1 && styles.radioButtonActive]} onPress={() => setTweetVehicle1(false)}>
-          <Text style={[styles.radioText, !tweetVehicle1 && styles.radioTextActive]}>No</Text>
-        </TouchableOpacity>
-      </View>
-
-      <SectionTitle title="Información del Vehículo 2" />
-      <FormInput label="Color" value={vehicle2Color} onChangeText={setVehicle2Color} />
-      <FormInput label="Marca" value={vehicle2Brand} onChangeText={setVehicle2Brand} />
-      <FormInput label="Patente" value={vehicle2Plate} onChangeText={setVehicle2Plate} />
-
-      <Text style={styles.radioLabel}>¿Habilitar Tweet de Alerta?</Text>
-      <View style={styles.radioGroup}>
-        <TouchableOpacity style={[styles.radioButton, tweetVehicle2 && styles.radioButtonActive]} onPress={() => setTweetVehicle2(true)}>
-          <Text style={[styles.radioText, tweetVehicle2 && styles.radioTextActive]}>Sí</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={[styles.radioButton, !tweetVehicle2 && styles.radioButtonActive]} onPress={() => setTweetVehicle2(false)}>
-          <Text style={[styles.radioText, !tweetVehicle2 && styles.radioTextActive]}>No</Text>
-        </TouchableOpacity>
-      </View>
-
       <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
         <Text style={styles.saveButtonText}>Guardar Perfil</Text>
       </TouchableOpacity>
@@ -108,7 +112,6 @@ export default function ProfileScreen() {
   );
 }
 
-// Los estilos se mantienen igual
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -143,35 +146,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
     color: '#C12F6E',
-  },
-  radioLabel: {
-    fontSize: 16,
-    color: '#C12F6E',
-    marginTop: 10,
-    marginLeft: 8
-  },
-  radioGroup: {
-    flexDirection: 'row',
-    marginTop: 8,
-    marginBottom: 16,
-    marginLeft: 8
-  },
-  radioButton: {
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: '#C12F6E',
-    marginRight: 10,
-  },
-  radioButtonActive: {
-    backgroundColor: '#C12F6E',
-  },
-  radioText: {
-    color: '#C12F6E',
-  },
-  radioTextActive: {
-    color: '#fff',
   },
   saveButton: {
     backgroundColor: '#C12F6E',

@@ -2,6 +2,8 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import { Alert, Image, ScrollView, StyleSheet, Text, TextInput, TextInputProps, TouchableOpacity, View } from 'react-native';
+// --- 1. IMPORTAMOS TODAS LAS FUNCIONES QUE USAREMOS DE LA DB ---
+import { addContact, getContactById, updateContact } from '../../lib/database';
 
 // --- DEFINIMOS LOS TIPOS PARA LAS PROPS ---
 type FormInputProps = {
@@ -10,7 +12,7 @@ type FormInputProps = {
   onChangeText: (text: string) => void;
 } & TextInputProps;
 
-// --- Componente reutilizable para nuestros campos de formulario (Ahora con tipos) ---
+// --- Componente reutilizable para nuestros campos de formulario ---
 const FormInput: React.FC<FormInputProps> = ({ label, value, onChangeText, ...props }) => (
   <View style={styles.inputContainer}>
     <TextInput
@@ -25,33 +27,61 @@ const FormInput: React.FC<FormInputProps> = ({ label, value, onChangeText, ...pr
 );
 
 export default function ContactEditScreen() {
-  // El resto del código no cambia
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id?: string }>();
   const isEditing = !!id;
 
   const [firstName, setFirstName] = useState('');
-  const [middleName, setMiddleName] = useState('');
+  const [middleName, setMiddleName] = useState(''); // No lo guardaremos, pero lo mantenemos por si lo quieres usar
   const [lastName, setLastName] = useState('');
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
 
+  // --- 2. useEffect AHORA CARGA DATOS REALES SI ESTAMOS EDITANDO ---
   useEffect(() => {
     if (isEditing) {
-      console.log("Modo Edición: Cargando datos para el contacto con ID:", id);
-      setFirstName("Juan");
-      setLastName("Pérez");
-      setPhone("+56 9 8765 4321");
-      setEmail("juan.perez@email.com");
-    } else {
-      console.log("Modo Añadir: Mostrando formulario vacío.");
+      const contactId = parseInt(id, 10);
+      const loadContactData = async () => {
+        try {
+          const contact = await getContactById(contactId);
+          if (contact) {
+            setFirstName(contact.firstName);
+            setLastName(contact.lastName || '');
+            setPhone(contact.phone);
+            setEmail(contact.email || '');
+          }
+        } catch (error) {
+          Alert.alert("Error", "No se pudieron cargar los datos del contacto.");
+        }
+      };
+      loadContactData();
     }
   }, [id, isEditing]);
 
-  const handleSave = () => {
-    Alert.alert('Guardado', 'El contacto ha sido guardado con éxito.', [
-      { text: 'OK', onPress: () => router.back() }
-    ]);
+  // --- 3. handleSave AHORA PUEDE AÑADIR O ACTUALIZAR ---
+  const handleSave = async () => {
+    if (!firstName.trim() || !phone.trim()) {
+      Alert.alert("Campos requeridos", "Por favor, ingresa al menos un nombre y un teléfono.");
+      return;
+    }
+
+    try {
+      if (isEditing) {
+        // Lógica para ACTUALIZAR
+        await updateContact(parseInt(id, 10), firstName, lastName, phone, email);
+      } else {
+        // Lógica para AÑADIR
+        await addContact(firstName, lastName, phone, email);
+      }
+      
+      Alert.alert('Éxito', 'El contacto ha sido guardado.', [
+        { text: 'OK', onPress: () => router.back() }
+      ]);
+
+    } catch (error) {
+      console.error("Error al guardar el contacto:", error);
+      Alert.alert("Error", "No se pudo guardar el contacto.");
+    }
   };
   
   const handleDelete = () => {
@@ -93,7 +123,6 @@ export default function ContactEditScreen() {
   );
 }
 
-// Los estilos se mantienen igual
 const styles = StyleSheet.create({
   container: {
     flex: 1,

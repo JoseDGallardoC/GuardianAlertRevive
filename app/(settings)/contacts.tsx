@@ -1,28 +1,23 @@
 // app/(settings)/contacts.tsx
-import { useRouter } from 'expo-router';
-import React, { useState } from 'react';
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useFocusEffect, useRouter } from 'expo-router';
+import React, { useCallback, useState } from 'react';
+import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+// --- 1. IMPORTAMOS TODAS LAS FUNCIONES DE LA DB ---
+import { Contact, deleteContact, getContacts } from '../../lib/database';
 
-type Contact = {
-  id: string;
-  name: string;
-  phone: string;
-};
-
-const mockContacts: Contact[] = [
-  { id: '1', name: 'Mamá', phone: '+56 9 1111 2222' },
-  { id: '2', name: 'Papá', phone: '+56 9 3333 4444' },
-  { id: '3', name: 'Emergencia', phone: '131' },
-];
-
-const ContactItem: React.FC<{ contact: Contact; onEdit: (id: string) => void }> = ({ contact, onEdit }) => (
+// --- 2. ACTUALIZAMOS ContactItem PARA RECIBIR onDelete ---
+const ContactItem: React.FC<{
+  contact: Contact;
+  onEdit: (id: number) => void;
+  onDelete: (id: number) => void;
+}> = ({ contact, onEdit, onDelete }) => (
   <View style={styles.contactItem}>
     <TouchableOpacity style={styles.contactInfo} onPress={() => onEdit(contact.id)}>
-      <Text style={styles.contactName}>{contact.name}</Text>
+      <Text style={styles.contactName}>{contact.firstName} {contact.lastName || ''}</Text>
       <Text style={styles.contactPhone}>{contact.phone}</Text>
     </TouchableOpacity>
     <View style={styles.contactActions}>
-      <TouchableOpacity onPress={() => alert(`Eliminar ${contact.name}`)}>
+      <TouchableOpacity onPress={() => onDelete(contact.id)}>
         <Text style={[styles.actionText, { color: '#E53935' }]}>Eliminar</Text>
       </TouchableOpacity>
     </View>
@@ -31,36 +26,81 @@ const ContactItem: React.FC<{ contact: Contact; onEdit: (id: string) => void }> 
 
 export default function ContactsScreen() {
   const router = useRouter();
-  // Estado para simular si estamos en el flujo de setup inicial
-  const [isSetupFlow, setIsSetupFlow] = useState(false); 
+  const [isSetupFlow, setIsSetupFlow] = useState(false);
+  const [contacts, setContacts] = useState<Contact[]>([]);
 
-  const handleEditContact = (id: string) => {
-    // Navegamos a la pantalla de edición, pasando el ID como parámetro
-    router.push({ pathname: '/(settings)/contactEdit', params: { id } });
+  // --- 3. CREAMOS UNA FUNCIÓN REUTILIZABLE PARA CARGAR CONTACTOS ---
+  const loadContacts = useCallback(async () => {
+    try {
+      const storedContacts = await getContacts();
+      setContacts(storedContacts);
+    } catch (error) {
+      console.error("Error al cargar los contactos:", error);
+      Alert.alert("Error", "No se pudieron cargar los contactos.");
+    }
+  }, []);
+
+  // useFocusEffect ahora solo llama a nuestra función de carga
+  useFocusEffect(
+    useCallback(() => {
+      loadContacts();
+    }, [loadContacts])
+  );
+
+  // --- 4. CREAMOS LA FUNCIÓN PARA MANEJAR LA ELIMINACIÓN ---
+  const handleDeleteContact = (id: number) => {
+    Alert.alert(
+      "Eliminar Contacto",
+      "¿Estás seguro de que quieres eliminar este contacto? Esta acción no se puede deshacer.",
+      [
+        { text: "Cancelar", style: "cancel" },
+        {
+          text: "Eliminar",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await deleteContact(id);
+              // Volvemos a cargar la lista para que se refleje el cambio
+              loadContacts();
+            } catch (error) {
+              Alert.alert("Error", "No se pudo eliminar el contacto.");
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleEditContact = (id: number) => {
+    router.push({ pathname: '/(settings)/contactEdit', params: { id: id.toString() } });
   };
 
   const handleAddContact = () => {
-    // Navegamos a la misma pantalla, pero sin pasar parámetros
     router.push('/(settings)/contactEdit');
   };
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
       <Text style={styles.title}>Estos son tus contactos de emergencia. Recibirán una alerta SMS.</Text>
-      
+
       <View style={styles.contactsList}>
-        {mockContacts.map(contact => (
-          <ContactItem key={contact.id} contact={contact} onEdit={handleEditContact} />
+        {/* --- 5. PASAMOS LA NUEVA FUNCIÓN handleDeleteContact AL COMPONENTE --- */}
+        {contacts.map(contact => (
+          <ContactItem
+            key={contact.id}
+            contact={contact}
+            onEdit={handleEditContact}
+            onDelete={handleDeleteContact}
+          />
         ))}
-        {/* Lógica para mostrar el botón de Añadir dinámicamente */}
-        {mockContacts.length < 6 && (
+
+        {contacts.length < 6 && (
           <TouchableOpacity style={styles.addButton} onPress={handleAddContact}>
             <Text style={styles.addButtonText}>+ Añadir Nuevo Contacto</Text>
           </TouchableOpacity>
         )}
       </View>
-      
-      {/* Lógica para mostrar el botón de Continuar condicionalmente */}
+
       {isSetupFlow && (
         <TouchableOpacity style={styles.continueButton} onPress={() => router.back()}>
           <Text style={styles.continueButtonText}>Continuar</Text>
@@ -116,6 +156,7 @@ const styles = StyleSheet.create({
   actionText: {
     color: '#C12F6E',
     fontWeight: 'bold',
+    marginLeft: 16,
   },
   addButton: {
     backgroundColor: '#E8F5E9',

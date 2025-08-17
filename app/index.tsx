@@ -1,52 +1,38 @@
 // app/index.tsx
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
-import React, { useEffect, useState } from 'react';
-import { Image, StyleSheet } from 'react-native';
+import React, { useEffect } from 'react';
+import { ActivityIndicator, StyleSheet } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 
-// Asegúrate que las imágenes estén en esta ruta
-const animationFrames = [
-    require('../assets/images/ic_launch_animation_1.png'),
-    require('../assets/images/ic_launch_animation_2.png'),
-    require('../assets/images/ic_launch_animation_3.png'),
-    require('../assets/images/ic_launch_animation_4.png'),
-];
+const Initializing = () => {
+  const router = useRouter();
 
-export default function SplashScreen() {
-    const [frameIndex, setFrameIndex] = useState(0);
-    const router = useRouter(); // Hook de navegación de Expo Router
+  useEffect(() => {
+    const checkOnboardingStatus = async () => {
+      try {
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        const hasCompleted = await AsyncStorage.getItem('hasCompletedOnboarding');
+        
+        if (hasCompleted) {
+          router.replace('/login');
+        } else {
+          router.replace('/onboarding');
+        }
+      } catch (e) {
+        console.error("Falló al revisar el estado del onboarding.", e);
+        router.replace('/onboarding');
+      }
+    };
+    checkOnboardingStatus();
+  }, []);
 
-    useEffect(() => {
-        const animationInterval = setInterval(() => {
-            setFrameIndex(prevIndex => (prevIndex + 1) % animationFrames.length);
-        }, 200);
-
-        const navigationTimeout = setTimeout(() => {
-            // Usamos router.replace para navegar al dashboard
-            // 'replace' evita que el usuario pueda volver atrás al splash screen
-            router.replace('/dashboard');
-        }, 4000);
-
-        return () => {
-            clearInterval(animationInterval);
-            clearTimeout(navigationTimeout);
-        };
-    }, []);
-
-    // Necesitarás instalar react-native-linear-gradient
-    // Ejecuta: npx expo install react-native-linear-gradient
-    return (
-        <LinearGradient
-            colors={['#C12F6E', '#83234E']} // Colores de ejemplo
-            style={styles.container}
-        >
-            <Image
-                source={animationFrames[frameIndex]}
-                style={styles.logo}
-            />
-        </LinearGradient>
-    );
-}
+  return (
+    <LinearGradient colors={['#C12F6E', '#83234E']} style={styles.container}>
+      <ActivityIndicator size="large" color="#FFFFFF" />
+    </LinearGradient>
+  );
+};
 
 const styles = StyleSheet.create({
     container: {
@@ -54,8 +40,6 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         alignItems: 'center',
     },
-    logo: {
-        width: 120,
-        height: 120,
-    },
 });
+
+export default Initializing;
